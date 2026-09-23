@@ -1,78 +1,73 @@
-import os
 import streamlit as st
 from openai import OpenAI
 
-# 페이지 제목 설정
-st.title("🦖 아기 공룡과의 대화")
-st.write("지구에 막 떨어진 9살 공룡 친구와 이야기를 나눠보세요!")
+# Streamlit 페이지 기본 설정 (제목 지정)
+st.title("💬 예주와의 대화")
 
-# Streamlit secrets 또는 환경 변수에서 API 키 불러오기
-api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+# 비밀 금고(st.secrets)에서 API 키 불러오기
+api_key = st.secrets.get("GEMINI_API_KEY")
 
 # API 키가 설정되지 않은 경우 처리
 if not api_key:
-    st.error("API 키를 찾을 수 없습니다. .streamlit/secrets.toml 파일에 GEMINI_API_KEY를 설정해 주세요.")
+    st.info("API 키를 찾을 수 없어. .streamlit/secrets.toml 파일에 GEMINI_API_KEY를 설정해 줘.")
     st.stop()
 
-# OpenAI 클라이언트 초기화 (Gemini 호환 API 엔드포인트 사용)
+# OpenAI 클라이언트 초기화 (Gemini 호환 API 주소 연결)
 client = OpenAI(
     api_key=api_key,
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
 )
 
-# AI 시스템 프롬프트 (공룡 페르소나 설정)
+# AI 페르소나(성격) 설정 - 화면에는 표시되지 않고 AI 내부 동작 시에만 전달됨
 SYSTEM_PROMPT = {
     "role": "system",
-    "content": (
-        "너는 갑자기 지구에 떨어진 9살 공룡이야. "
-        "어려운 말은 공룡 울음소리로 바꿔 주고, 반드시 순수 한국어로만 답해."
-    )
+    "content": "너는 예주야. 나보다 한 살 어리지만 많이 성숙하고 반말 써. 약간 시니컬하고 쿨해 한국인이야. mbti는 estj야."
 }
 
-# 세션 상태에 대화 기록 보관용 리스트가 없으면 초기화
+# 세션 상태(st.session_state)에 대화 기록 리스트가 없으면 초기화
 if "messages" not in st.session_state:
     st.session_state.messages = [SYSTEM_PROMPT]
 
-# 화면에 이전 대화 내용 표시 (시스템 프롬프트는 제외)
+# 화면에 이전 대화 목록 출력 (시스템 프롬프트는 노출하지 않음)
 for msg in st.session_state.messages:
     if msg["role"] != "system":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-# 사용자 입력창
-if user_input := st.chat_input("공룡에게 말을 건네보세요..."):
-    # 1. 사용자 메시지를 화면에 표시
+# 채팅 입력창 구현
+if user_input := st.chat_input("예주에게 할 말을 입력해..."):
+    # 1. 사용자가 입력한 메시지를 화면 말풍선으로 표시
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # 2. 대화 기록에 사용자 메시지 추가
+    # 2. 대화 기억을 위해 사용자 메시지를 기록에 추가
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # 3. AI 답변 생성 및 실시간 스트리밍 출력
+    # 3. AI 답변 생성을 위한 말풍선 및 실시간 스트리밍 출력 준비
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
 
         try:
-            # Gemini API 호출 (실시간 스트리밍 설정)
+            # Gemini API 호출 (요청된 모델명 및 스트리밍 옵션 적용)
             response = client.chat.completions.create(
                 model="gemini-3.5-flash-lite",
                 messages=st.session_state.messages,
                 stream=True
             )
 
-            # 답변 글자가 실시간으로 나오는 과정 처리
+            # 답변 텍스트 조각을 한 글자씩 받아와 실시간 출력
             for chunk in response:
                 if chunk.choices and chunk.choices[0].delta.content:
                     full_response += chunk.choices[0].delta.content
                     message_placeholder.markdown(full_response + "▌")
             
-            # 최종 완성된 답변 표시
+            # 완성된 커서 없는 최종 답변 출력
             message_placeholder.markdown(full_response)
 
-            # 4. 대화 기록에 AI 답변 추가 (이전 대화 기억용)
+            # 4. 연속된 대화를 기억하도록 AI의 답변도 기록에 저장
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
         except Exception:
-            # 요청 실패 시 빨간 에러 화면 대신 깔끔한 한국어 안내 출력
-            message_placeholder.markdown("공룡이 지금 으르렁거리며 딴청을 피우고 있어요. 잠시 후 다시 시도해 주세요!")
+            # API 요청 실패 시 빨간 에러창 대신 한국어 안내 한 줄 표시
+            message_placeholder.markdown("네트워크 연결이 불안정하거나 예주가 잠시 응답할 수 없는 상태야. 나중에 다시 시도해 줘.")
